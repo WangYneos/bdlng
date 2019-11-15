@@ -1,5 +1,5 @@
 static string sname("Server");
-MCRESULT runcmd(const string& a) {
+BDL_EXPORT MCRESULT runcmd(const string& a) {
     return getMC()->getCommands()->requestCommandExecution(std::unique_ptr<CommandOrigin>((CommandOrigin*)new ServerCommandOrigin(sname,*(ServerLevel*)getMC()->getLevel(),(CommandPermissionLevel)5)),a,4,1);
 }
 
@@ -52,11 +52,12 @@ struct ACmd : Command {
 using std::string;
 struct req {
     string name,desc;
+    int permlevel;
     void* fn;
 };
 static std::deque<req> reqs;
-void register_cmd(const std::string& name,void* fn,const std::string& desc) {
-    reqs.push_back({name,desc,fn});
+BDL_EXPORT void register_cmd(const std::string& name,void* fn,const std::string& desc,int perm) {
+    reqs.push_back({name,desc,perm,fn});
 }
 static ACmd* chelper(void* fn) {
     ACmd* fk=new ACmd();
@@ -66,7 +67,7 @@ static ACmd* chelper(void* fn) {
 
 static void handle_regcmd(CommandRegistry& t) {
     for(auto const& i:reqs) {
-        t.registerCommand(i.name,i.desc.c_str(),(CommandPermissionLevel)0,(CommandFlag)0,(CommandFlag)0x40);
+        t.registerCommand(i.name,i.desc.c_str(),(CommandPermissionLevel)i.permlevel,(CommandFlag)0,(CommandFlag)0x40);
         t.registerOverload2(i.name.c_str(),wr_ret_uni((u64)i.fn,(char*)chelper),CommandParameterData(type_id<CommandRegistry, CommandMessage>(), &CommandRegistry::parse<CommandMessage>, "operation", (CommandParameterDataType)0, nullptr, offsetof(ACmd, msg), false, -1));
     }
     reqs.clear();

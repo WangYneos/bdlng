@@ -1,4 +1,4 @@
-
+/*
     typedef int(*hook_1_fn)(Player* a0,Actor & a1);
     static list<void*> ev_attack;
     void reg_attack(void* a){
@@ -229,4 +229,124 @@
             return __hook_8.orig(a0,a1,a2);
         }
     }
+*/
+list<std::function<bool(ServerPlayer const* a0,string& payload)> > chat_hook;
+THook(void*,_ZN20ServerNetworkHandler19_displayGameMessageERK6PlayerRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE,void* a,ServerPlayer* sp,string& x){
+    int fg=1;
+    if(!sp){
+        return original(a,sp,x);
+    }
+    for(auto& hk:chat_hook){
+        if(hk(sp,x)==false){
+            fg=0;
+            break;
+        }
+    }
+    if(fg) return original(a,sp,x);
+    return nullptr;
+}
+void reg_chat(std::function<bool(ServerPlayer const* a0,string& payload)> x){
+    chat_hook.push_back(x);
+}
 
+list<std::function<void(ServerPlayer *)> > join_hook;
+THook(void*,_ZN20ServerNetworkHandler24_sendAdditionalLevelDataER12ServerPlayerRK17NetworkIdentifier,void* a,ServerPlayer* sp,void* x){
+    int fg=1;
+    for(auto& hk:join_hook){
+        hk(sp);
+    }
+    return original(a,sp,x);
+}
+void reg_player_join(std::function<void(ServerPlayer *)> x){
+    join_hook.push_back(x);
+}
+
+list<std::function<void(ServerPlayer *)> > left_hook;
+THook(void*,_ZN20ServerNetworkHandler13_onPlayerLeftEP12ServerPlayerb,void* a,ServerPlayer* sp,bool x){
+    int fg=1;
+    for(auto& hk:left_hook){
+        hk(sp);
+    }
+    return original(a,sp,x);
+}
+void reg_player_left(std::function<void(ServerPlayer *)> x){
+    left_hook.push_back(x);
+}
+
+
+struct Actor;
+list<std::function<bool(ServerPlayer* a0,Actor* a1)> > attack_hook;
+THook(void*,_ZN6Player6attackER5Actor,ServerPlayer* sp,Actor* x){
+    int fg=1;
+    for(auto& hk:attack_hook){
+        if(hk(sp,x)==false){
+            fg=0;
+            break;
+        }
+    }
+    if(fg)
+    return original(sp,x);
+    else return nullptr;
+}
+void reg_attack(std::function<bool(ServerPlayer* a0,Actor* a1)> x){
+    attack_hook.push_back(x);
+}
+
+list<std::function<bool(Actor* a0,ItemActor * a1)> > pickup_hook;
+THook(void*,_ZN5Actor10pickUpItemER9ItemActor,Actor* sp,ItemActor* x){
+    int fg=1;
+    for(auto& hk:pickup_hook){
+        if(hk(sp,x)==false){
+            fg=0;
+            break;
+        }
+    }
+    if(fg)
+    return original(sp,x);
+    else return nullptr;
+}
+void reg_pickup(std::function<bool(Actor* a0,ItemActor * a1)> x){
+    pickup_hook.push_back(x);
+}
+
+list<std::function<bool(GameMode* a0,BlockPos const*)> > dest_hook;
+THook(void*,_ZN8GameMode12destroyBlockERK8BlockPosh,GameMode* sp,BlockPos const& x,unsigned char cc){
+    int fg=1;
+    for(auto& hk:dest_hook){
+        if(hk(sp,&x)==false){
+            fg=0;
+            break;
+        }
+    }
+    if(fg)
+    return original(sp,x,cc);
+    else return nullptr;
+}
+void reg_destroy(std::function<bool(GameMode* a0,BlockPos const*)> x){
+    dest_hook.push_back(x);
+}
+
+list<std::function<bool(GameMode* a0,ItemStack * a1,BlockPos const* a2,BlockPos const* dstPos,Block const* a5)> > useion_hook;
+THook(void*,_ZN8GameMode9useItemOnER9ItemStackRK8BlockPoshRK4Vec3PK5Block,GameMode* sp,ItemStack& ite, BlockPos const& bpos, unsigned char side, Vec3 const& unk2, Block const* bl){
+    int fg=1;
+    BlockPos calced(bpos);
+    const int Z[]= {0,0,-1,1,0,0};
+    const int X[]= {0,0,0,0,-1,1};
+    const int Y[]= {-1,1,0,0,0,0};
+    calced.x+=X[side];
+    calced.y+=Y[side];
+    calced.z+=Z[side];
+    //printf("side %d\n,%d %d %d\n",side,calced.x,calced.y,calced.z);
+    for(auto& hk:useion_hook){
+        if(hk(sp,&ite,&bpos,&calced,bl)==false){
+            fg=0;
+            break;
+        }
+    }
+    if(fg)
+    return original(sp,ite,bpos,side,unk2,bl);
+    else return nullptr;
+}
+void reg_useitemon(std::function<bool(GameMode* a0,ItemStack * a1,BlockPos const* a2,BlockPos const* dstPos,Block const* a5)> x){
+    useion_hook.push_back(x);
+}

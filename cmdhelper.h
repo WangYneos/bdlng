@@ -12,5 +12,4 @@
 
 //void cmdhelper_init();
 Minecraft* getMC();
-void register_cmd(const std::string& name,void* fn,const std::string&des="mod");
 void register_shutdown(void*);

@@ -14,43 +14,19 @@
 #include<memory>
 #include"money.h"
 #include<dlfcn.h>
+#include"rapidjson/document.h"
+#include<fstream>
 using std::string;
 using std::to_string;
 extern "C" {
-    void money_init(std::list<string>& modlist);
+    BDL_EXPORT void money_init(std::list<string>& modlist);
 }
 extern void load_helper(std::list<string>& modlist);
 static std::unordered_map<string,int> moneys;
-struct shop {
-    int mon;
-    string ite;
-    int amo;
-    static string tostr(const shop& a) {
-        char buf[32768];
-        int ptr=0;
-        putint(buf,ptr,a.mon);
-        putint(buf,ptr,a.amo);
-        putstr(buf,ptr,a.ite);
-        return string(buf,ptr);
-    }
-    static void fromstr(const string& b,shop& a) {
-        const char* buf=b.c_str();
-        int ptr=0;
-        getint(buf,ptr,a.mon);
-        getint(buf,ptr,a.amo);
-        a.ite=getstr(buf,ptr);
-    }
-};
-static std::unordered_map<string,shop> shops;
-static int shopmod=0;
 static void save() {
     char* bf;
     int sz=maptomem(moneys,&bf,h_str2str,h_int2str);
     mem2file("data/money/money.db",bf,sz);
-    if(shopmod) {
-        sz=maptomem(shops,&bf,h_str2str,shop::tostr);
-        mem2file("data/money/shop.db",bf,sz);
-    }
 }
 static void load() {
     register_shutdown(fp(save));
@@ -60,20 +36,29 @@ static void load() {
     int sz;
     struct stat tmp;
     if(stat("data/money/money.db",&tmp)==-1) {
-        shopmod=1;
         save();
     }
     file2mem("data/money/money.db",&buf,sz);
     memtomap(moneys,buf,h_str2str_load,h_str2int);
-    file2mem("data/money/shop.db",&buf,sz);
-    memtomap(shops,buf,h_str2str_load,shop::fromstr);
 }
-
+int INIT_MONEY;
+using namespace rapidjson;
+void loadcfg(){
+    Document dc;
+    std::ifstream ff;
+    ff.open("config/money.json",std::ios::in);
+    char buf[1024*8];
+    buf[ff.readsome(buf,1024*8)]=0;
+    ff.close();
+    if(dc.ParseInsitu(buf).HasParseError()){
+        printf("[MONEY] Config JSON ERROR!\n");
+        exit(1);
+    }
+    INIT_MONEY=dc["init_money"].GetInt();
+}
 int get_money(const string& pn) {
-    /*if(moneys.count(pn)==0) moneys[pn]=50; //TODO:init money
-    return moneys[pn];*/
     //lazy init
-    return moneys.count(pn)==0?50:moneys[pn];
+    return moneys.count(pn)==0?INIT_MONEY:moneys[pn];
 }
 void set_money(const string& pn,int am) {
     moneys[pn]=am;
@@ -187,89 +172,11 @@ static void oncmd(std::vector<string>& a,CommandOrigin const & b,CommandOutput &
     }
 }
 
-static void oncmd2(std::vector<string>& a,CommandOrigin & b,CommandOutput &outp) {
-    ARGSZ(1)
-    if(a[0]=="add" && (int)b.getPermissionsLevel()>0) {
-        ARGSZ(5)
-        shop sk;
-        sk.ite=a[2]; //物品英文名
-        sk.amo=atoi(a[3].c_str()); //数量
-        sk.mon=atoi(a[4].c_str()); //价格
-        if(sk.amo==0) {
-            outp.error("[Shop] 你开心就好");
-            return;
-        }
-        shops[a[1]]=sk;
-        shopmod=1;
-        //save();
-        outp.success("§e[Shop] 添加项目: 项目名: "+a[1]+"  物品英文名: "+a[2]+ "  数量: "+a[3]+"  价格: "+a[4]);
-    }
-    if(a[0]=="del" && (int)b.getPermissionsLevel()>0) {
-        ARGSZ(2)
-        shops.erase(a[1]);
-        shopmod=1;
-        // save();
-        outp.success("§e[Shop] 删除了物品: "+a[1]);
-    }
-    if(a[0]=="ls") {
-        outp.success("§e商店项目列表:");
-        for(auto i:shops) {
-            shop& sk=i.second;
-            char buf[11451];
-            sprintf(buf,"§e项目名: %s  物品英文名: %s  数量: %d  价格: %d",i.first.c_str(),sk.ite.c_str(),sk.amo,sk.mon);
-            outp.addMessage(string(buf));
-        }
-        outp.success("§eTip: 数量为负数的是回收商店");
-    }
-    if(a[0]=="buy") { //购买商店
-        ARGSZ(2)
-        if(!shops.count(a[1])) { //如果商店不存在物品
-            outp.error("§e[Shop] 商店不存在此项目");
-            return;
-        }
-        const shop& sp=shops[a[1]];
-        if(sp.amo>0) { //判断物品数量是否大于0，否则发送提示
-            if(red_money(b.getName(),sp.mon)) { //扣除金钱，如果失败则返回金币不足
-                runcmd(("give "+b.getName()+" "+sp.ite+" "+to_string(sp.amo)));
-                outp.success("§e[Shop] 成功购买了 "+to_string(sp.amo)+" 个 "+sp.ite);   
-            } else {
-                outp.error("[Shop] 金币不足");
-            }
-        } else {
-            outp.error("[Shop] 你应该使用/shop sell");
-        }
-        return;
-    }
-    if(a[0]=="sell") { //出售商店
-        ARGSZ(2)
-        if(!shops.count(a[1])) { //如果商店不存在物品
-            outp.error("§e[Shop] 商店不存在此项目");
-            return;
-        }
-        const shop& sp=shops[a[1]];
-        if(sp.amo<0) { //判断物品数量是否小于0，否则发送提示
-            auto res=runcmd((string("clear ")+b.getName()+string(" ")+sp.ite+string(" 0 ")+to_string(sp.amo*-1)));
-            if(res.isSuccess()) {
-                add_money(b.getName(),sp.mon);
-                outp.success("§e[Shop] 成功出售了 "+to_string(sp.amo*-1)+" 个 "+sp.ite);
-                return;
-            } else {
-                outp.error("[Shop] 物品不足");
-            }
-        } else {
-            outp.error("[Shop] 你应该使用/shop buy");
-        }
-        return;
-    }
-    if(a[0]=="help") {
-        outp.error("§e商店指令列表:\n/shop buy 项目名 ——购买指定项目中的物品\n/shop sell 项目名 ——将指定项目中的物品出售\n/shop ls ——查看项目列表");
-    }
-}
-
 void money_init(std::list<string>& modlist) {
-    printf("[MONEY&SHOP] loaded!\n");
+    printf("[MONEY] loaded!\n");
     load();
+    loadcfg();
     register_cmd("money",(void*)oncmd,"经济系统");
-    register_cmd("shop",(void*)oncmd2,"商店");
+    register_cmd("moneyreload",(void*)loadcfg,"reload money cfg",1);
     load_helper(modlist);
 }

@@ -24,7 +24,7 @@ using std::forward_list;
 //#define dbg_printf(...) {}
 #define dbg_printf printf
 extern "C" {
-    void tp_init(std::list<string>& modlist);
+   BDL_EXPORT void tp_init(std::list<string>& modlist);
 }
 extern void load_helper(std::list<string>& modlist);
 struct Vpos {

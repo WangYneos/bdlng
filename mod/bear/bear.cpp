@@ -32,7 +32,7 @@ using std::unordered_map;
 #define dbg_printf(...) {}
 //#define dbg_printf printf
 extern "C" {
-    void bear_init(std::list<string>& modlist);
+    BDL_EXPORT void bear_init(std::list<string>& modlist);
 }
 extern void load_helper(std::list<string>& modlist);
 static unordered_map<string,int> banlist;
@@ -98,8 +98,8 @@ static void async_log(const char* fmt,...) {
     write(logfd,buf,s);
     va_end(vl);
 }
-static u64(*hori)(u64 t,NetworkIdentifier& a, Certificate& b);
-static u64 handleLogin(u64 t,NetworkIdentifier& a, Certificate& b) {
+
+THook(void*,_ZN20ServerNetworkHandler22_onClientAuthenticatedERK17NetworkIdentifierRK11Certificate,u64 t,NetworkIdentifier& a, Certificate& b){
     string pn=ExtendedCertificate::getIdentityName(b);
     string xuid=ExtendedCertificate::getXuid(b);
     async_log("[JOIN]%s joined game with xuid <%s>\n",pn.c_str(),xuid.c_str());
@@ -110,15 +110,15 @@ static u64 handleLogin(u64 t,NetworkIdentifier& a, Certificate& b) {
     if(isBanned(pn) || (xuid_name.count(xuid) && isBanned(xuid_name[xuid]))) {
         string ban("§c你在当前服务器的黑名单内!");
         getMC()->getNetEventCallback()->disconnectClient(a,ban,false);
-        return 0;
+        return nullptr;
     }
-    return hori(t,a,b);
+    return original(t,a,b);
 }
-static int (*cori)(void*,Player const&,string&);
-static int hkc(void* a,Player & b,string& c) {
-    int ret=cori(a,b,c);
-    async_log("[CHAT]%s: %s\n",b.getName().c_str(),c.c_str());
-    return ret;
+
+static bool hkc(ServerPlayer const * b,string& c) {
+    c="xxoo";
+    async_log("[CHAT]%s: %s\n",b->getName().c_str(),c.c_str());
+    return 1;
 }
 
 #include <sys/socket.h>
@@ -136,10 +136,6 @@ extern "C" ssize_t recvfrom_hook(int socket, void * buffer, size_t length,
         async_log("[NETWORK] %s send conn\n",buf);
     }
     return rt;
-}
-static void do_patch() {
-    hori=(typeof(hori))MyHook(fp(dlsym(NULL,"_ZN20ServerNetworkHandler22_onClientAuthenticatedERK17NetworkIdentifierRK11Certificate")),fp(handleLogin));
-    cori=(typeof(cori))MyHook(fp(dlsym(NULL,"_ZN20ServerNetworkHandler19_displayGameMessageERK6PlayerRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE")),fp(hkc));
 }
 static void oncmd(std::vector<string>& a,CommandOrigin const & b,CommandOutput &outp) {
     ARGSZ(1)
@@ -166,31 +162,35 @@ static void oncmd2(std::vector<string>& a,CommandOrigin const & b,CommandOutput 
 //add custom
 using std::unordered_set;
 unordered_set<string> banitems,warnitems;
-static int handle_u(GameMode* a0,ItemStack * a1,BlockPos const& a2,unsigned char a3,Vec3 const& a4,Block const* a5) {
+static bool handle_u(GameMode* a0,ItemStack * a1,BlockPos const* a2,BlockPos const* dstPos,Block const* a5) {
     if(a0->getPlayer()->getPlayerPermissionLevel()>1) return 1;
     string sn=a0->getPlayer()->getName();
     char buf[1024];
     strcpy(buf,a1->toString().c_str());
-    for(int i=0; buf[i]; ++i)
+    for(int i=0; buf[i]; ++i){
         buf[i]=tolower(buf[i]);
-    string sbuf(buf);
+    }
+    string sbuf(buf,strlen(buf));
     //#define check(a) strstr(buf,a)!=NULL
     //if(check("barrier") || check("bedrock") || check("spawn")) {
-    if(banitems.count(sbuf)){
-        async_log("[ITEM] %s 使用高危物品(banned) %s pos: %d %d %d\n",sn.c_str(),buf,a2.x,a2.y,a2.z);
+    for(auto& i:banitems){
+        if(sbuf.find(i)!=string::npos){
+        async_log("[ITEM] %s 使用高危物品(banned) %s pos: %d %d %d\n",sn.c_str(),buf,a2->x,a2->y,a2->z);
         sendText2(a0->getPlayer(),"§c无法使用违禁物品");
         return 0;
+        }
+    }
+    for(auto& i:warnitems){
+        if(sbuf.find(i)!=string::npos){
+        async_log("[ITEM] %s 使用危险物品(warn) %s pos: %d %d %d\n",sn.c_str(),buf,a2->x,a2->y,a2->z);
+        return 1;
+        }
     }
     //if(check("tnt") || check("lava")) {
-    if(warnitems.count(sbuf)){
-        async_log("[ITEM] %s 使用危险物品(warn) %s pos: %d %d %d\n",sn.c_str(),buf,a2.x,a2.y,a2.z);
-        return 1;
-    }
     return 1;
 }
-static int handle_left(ServerNetworkHandler* a0,ServerPlayer* a1,bool a2){
+static void handle_left(ServerPlayer* a1){
 	async_log("[LEFT] %s left game\n",a1->getName().c_str());
-	return 1;
 }
 #include"rapidjson/document.h"
 
@@ -228,7 +228,9 @@ THook(void*,_ZN5BlockC2EtR7WeakPtrI11BlockLegacyE,Block* a,unsigned short x,void
 }
 
 unordered_map<string,clock_t> lastchat;
+int FChatLimit;
 bool ChatLimit(ServerPlayer* p){
+    if(!FChatLimit || p->getPlayerPermissionLevel()>1) return true;
     auto last=lastchat.find(p->getRealNameTag());
     if(last!=lastchat.end()){
     auto old=last->second;
@@ -386,7 +388,7 @@ char buf[1024*1024];
 using namespace rapidjson;
 void load_config(){
     banitems.clear();warnitems.clear();
-    int fd=open("configs/bear.json",O_RDONLY);
+    int fd=open("config/bear.json",O_RDONLY);
     if(fd==-1){
         printf("[BEAR] Cannot load config file!check your configs folder\n");
         exit(0);
@@ -394,15 +396,20 @@ void load_config(){
     buf[read(fd,buf,1024*1024-1)]=0;
     close(fd);
     Document d;
-    d.Parse(buf);
-    FPushBlock=d["PushChest"].GetBool();
-    FExpOrb=d["SpwanExp"].GetBool();
-    FDest=d["DestroyCheck"].GetBool();
+    if(d.ParseInsitu(buf).HasParseError()){
+        printf("[ANTIBEAR] JSON ERROR!\n");
+        exit(1);
+    }
+    FPushBlock=d["FPushChest"].GetBool();
+    FExpOrb=d["FSpwanExp"].GetBool();
+    FDest=d["FDestroyCheck"].GetBool();
+    FChatLimit=d["FChatLimit"].GetBool();
     string x=d["banitems"].GetString();
     using std::vector;
     vector<string> ite;
     split_string(x,ite,",");
     for(auto& i:ite){
+        printf("[ANTIBEAR] adding banitem %s\n",i.c_str());
         banitems.insert(i);
     }
     x=d["warnitems"].GetString();
@@ -453,15 +460,15 @@ static int handle_dest(GameMode* a0,BlockPos const& a1,unsigned char a2) {
     return 1;
 }
 void bear_init(std::list<string>& modlist) {
-    do_patch();
     load();
     load2();
     initlog();
-    register_cmd("ban",fp(oncmd),"封禁玩家");
-    register_cmd("unban",fp(oncmd2),"解除封禁");
-    reg_useitemon(fp(handle_u));
-    reg_player_left(fp(handle_left));
-    reg_config_reader(load_config);
+    register_cmd("ban",fp(oncmd),"封禁玩家",1);
+    register_cmd("unban",fp(oncmd2),"解除封禁",1);
+    register_cmd("reloadbear",fp(load_config),"Reload Configs for antibear",1);
+    reg_useitemon(handle_u);
+    reg_player_left(handle_left);
+    reg_chat(hkc);
     load_config();
     rori=(typeof(rori))(MyHook(fp(recvfrom),fp(recvfrom_hook)));
     printf("[ANTI-BEAR] Loaded\n");

@@ -26,8 +26,10 @@ void* MyHook(void* oldfunc, void* newfunc);
     static ret name ( __VA_ARGS__ ) ; \
     static CONS(name, _t) & CONS($, name) () { static CONS(name, _t) fn; return fn; } \
     static ret CONS($$, name) ( __VA_ARGS__ )
+
 #include <dlfcn.h>
 #include <cstdio>
+
 struct RegisterStaticHook {
   RegisterStaticHook(const char *sym, void *hook, void **org) {
     auto r = dlsym(NULL, sym);

@@ -8,14 +8,15 @@
 #include<list>
 #include<atomic>
 #include<vector>
-#include<dlfcn.h>
 #include<cstdint>
 #include<cstring>
-
+#include<dlfcn.h>
 #include<unistd.h>
 #include<sys/fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+
+#define BDL_EXPORT __attribute__((visibility("default")))
 
 using std::string;
 using std::unordered_map;
@@ -427,7 +428,7 @@ struct InventorySource {
 };
 
 
-struct MyPkt{
+struct MyPkt:Packet{
     void** vtbl;
     char filler[64];
     int id;

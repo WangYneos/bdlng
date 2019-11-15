@@ -16,7 +16,7 @@ using std::vector;
 #include<sstream>
 
 extern "C" {
-    void base_init(list<string>& modlist);
+   BDL_EXPORT void base_init(list<string>& modlist);
 }
 
 //export APIS
@@ -36,36 +36,40 @@ void split_string(const std::string& s, std::vector<std::string>& v, const std::
 }
 void execute_cmd_random(const vector<string>& chain){
     int rd=rand()%chain.size();
-    runcmd(chain[rd]);
+    //runcmd(chain[rd]);
+    execute_cmdchain(chain[rd],"",false);
 }
-bool execute_cmdchain(const string& chain_,ServerPlayer* sp,bool chained){
+bool execute_cmdchain(const string& chain_,const string& sp,bool chained){
     string chain=chain_;
-    if(sp){
-        std::string::size_type pos(0);
-        while((pos=chain.find("%name%"))!=std::string::npos){
-            chain.replace(pos,pos+6,sp->getName());
+    if(sp.size()){
+        vector<string> exp;
+        string tmp;
+        const string& name=sp;
+        split_string(chain,exp,"%name%");
+        int expsz=exp.size();
+        int totsz=0;
+        for(auto& i:exp){
+            tmp+=i;
+            totsz++;
+            if(totsz<expsz){
+                tmp+=name;
+            }
         }
+        chain=tmp;
     }
-    vector<string> dst;
-    split_string(chain.substr(chain[0]=='!'),dst,",");
     if(chain[0]=='!'){
+        vector<string> dst;
+        split_string(chain.substr(1),dst,";");
         execute_cmd_random(dst);
         return true;
     }
+    vector<string> dst;
+    split_string(chain,dst,",");
     for(auto& i:dst){
         auto res=runcmd(i);
         if(!res.isSuccess() && chained) return false;
     }
     return true;
-}
-list<void (*)()> config_reader;
-void reg_config_reader(void (*readcb)()){
-    config_reader.push_back(readcb);
-}
-void do_reload(){
-    for(auto i:config_reader){
-        i();
-    }
 }
 struct TeleportCommand {
     char filler[1024];
@@ -91,6 +95,8 @@ void TeleportA(Actor& a,Vec3 b,AutomaticID<Dimension,int> c) {
 }
 void KillActor(Actor* a) {
     //dirty workaround
+    auto x=(*(uintptr_t *)a + 1816LL);
+    printf("call %p\n",x);
     (*(void ( **)(void*))(*(uintptr_t *)a + 1816LL))(a);
 }
 Player* getplayer_byname(const string& name) {
@@ -132,7 +138,7 @@ Player* getplayer_byname2(const string& name) {
 }
 
 static Minecraft* MC;
-Minecraft* getMC() {
+BDL_EXPORT Minecraft* getMC() {
     return MC;
 }
 THook(void*,_ZN14ServerCommands19setupStandardServerER9MinecraftRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES9_P15PermissionsFile,Minecraft& a, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const& d, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const& b, PermissionsFile* c){
@@ -165,7 +171,6 @@ static void autostop(){
 void base_init(list<string>& modlist)
 {
     printf("[MOD/BASE] loaded!\n");    	
-    set_int_handler(fp(autostop));
-    register_cmd("reload",fp(do_reload));		
+    set_int_handler(fp(autostop));		
     load_helper(modlist);
 }
