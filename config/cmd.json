@@ -1,0 +1,11 @@
+[
+{"type":"timer",
+"time":1,"shift":2,
+"cmd":"kill @e"},
+{"type":"join",
+"cmd":"say %name% nmsl"},
+{"type":"define",
+"name":"nmsl",
+"cond":"",
+"cmd":"stop"}
+]
