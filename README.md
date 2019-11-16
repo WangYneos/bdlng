@@ -12,7 +12,7 @@ BedrockServer launcher with mods support (1.13 only)
 
 #安装原版服务端
 wget https://minecraft.azureedge.net/bin-linux/bedrock-server-1.13.2.0.zip
-unzip bedrock-server-1.13.0.34.zip
+unzip bedrock-server-1.13.2.0.zip
 
 #安装mod及loader
 git clone https://github.com/sysca11/bdlng --depth=1
