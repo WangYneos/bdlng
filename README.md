@@ -11,20 +11,21 @@ BedrockServer launcher with mods support (1.13 only)
 #(In your server folder)在你的服务器目录
 
 #安装原版服务端
-wget https://minecraft.azureedge.net/bin-linux/bedrock-server-1.13.0.34.zip
+wget https://minecraft.azureedge.net/bin-linux/bedrock-server-1.13.2.0.zip
 unzip bedrock-server-1.13.0.34.zip
 
 #安装mod及loader
-git clone https://github.com/sysca11/bdlauncher --depth=1
+git clone https://github.com/sysca11/bdlng --depth=1
 mkdir mods
-cp -a ./bdlauncher/out/* ./mods
-cp -a ./bdlauncher/mod.list ./mods
+cp -a ./bdlng/out/* ./mods
+cp -a ./bdlng/mod.list ./mods
+cp -a ./bdlng/config ./
 LD_LIBRARY_PATH=. LD_PRELOAD=./mods/a.so ./bedrock_server
 </pre>
 <pre>
 #快速升级
 #升级bds
-wget https://minecraft.azureedge.net/bin-linux/bedrock-server-1.13.0.34.zip
+wget https://minecraft.azureedge.net/bin-linux/bedrock-server-1.13.2.0.zip
 mv server.properties server.propertie
 mv whitelist.json whitelist.jso
 unzip bedrock-server-1.13.0.34.zip
@@ -33,11 +34,12 @@ rm -rf server.properties
 mv server.propertie server.properties
 mv whitelist.jso whitelist.json
 
-#升级bdlauncher
-git clone https://github.com/sysca11/bdlauncher --depth=1
+#升级(可以从bdlauncher升级到bdl)
+git clone https://github.com/sysca11/bdlng --depth=1
 mkdir mods
-cp -a ./bdlauncher/out/* ./mods
-cp -a ./bdlauncher/mod.list ./mods
+cp -a ./bdlng/out/* ./mods
+cp -a ./bdlng/mod.list ./mods
+cp -a ./bdlng/config ./
 
 </pre>
 
